@@ -1,6 +1,8 @@
-Eminem Lyrics Generator 🎤
+Eminem Lyrics Generator
 
 A bigram Markov chain that generates rap lyrics in Eminem's style, with rhyme awareness and optional LLM refinement.
+
+Inspired by HW 6 Assignment Autumn 2025 CMSC 14100 @ UChicago by Staff
 
 How It Works
 
