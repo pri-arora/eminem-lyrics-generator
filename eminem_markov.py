@@ -38,7 +38,7 @@ END_TOKEN = "<END>"
 
 
 class RhymeEngine:
-    """Handles rhyme detection and finding rhyming words."""
+    """ rhyme detection and finding rhyming words."""
     
     def __init__(self, vocabulary: set[str]):
         self.vocabulary = vocabulary
@@ -46,7 +46,7 @@ class RhymeEngine:
         self._build_rhyme_index()
     
     def _get_rhyme_sound(self, word: str) -> Optional[str]:
-        """Extract the rhyme sound (last stressed vowel + everything after) from a word."""
+        """get rhyme sound last stressed vowel & everything after from a word."""
         word = word.lower().strip()
         
         if HAS_PRONOUNCING:
@@ -64,7 +64,7 @@ class RhymeEngine:
         return word
     
     def _build_rhyme_index(self):
-        """Pre-compute rhyme groups for the vocabulary."""
+        """compute rhyme groups for the vocab."""
         rhyme_groups: dict[str, list[str]] = defaultdict(list)
         
         for word in self.vocabulary:
