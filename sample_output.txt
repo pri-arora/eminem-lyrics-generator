@@ -1,0 +1,16 @@
+>>> python eminem_markov.py eminem_lyrics.txt --bars 8 --refine --api-key
+-------------------------------------------------------------------------
+Training on: eminem_lyrics.txt
+Trained on 21138 lines
+Vocabulary size: 14197 words
+Unique bigrams: 72147
+-------------------------------------------------------------------------
+I'm lit, and that moment's been long gone Stuck in mid-air, I'm loving every song
+Till the lights go out, I'm gonna go all night At the top of my game, feeling right
+End up eating a pill, probably I'll take the fall 
+Pop up to the surface, got the dust off my wall 
+To the crazy world, like the wizard of Oz 
+Oh well, this is my heart, and you know the cost 
+But the fans are jumping, and I'm feeling alive
+
+>>>
