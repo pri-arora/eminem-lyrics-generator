@@ -9,6 +9,7 @@ Consulted Claude Code; Built with Cursor; Used Groq API
 
 Example Usage:
     python eminem_markov.py eminem_lyrics.txt --bars 8 --rhyme-scheme AABB
+    python eminem_markov.py eminem_lyrics.txt --bars 8 --refine --show-raw
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import random
 import re
 import argparse
+import os
 from collections import defaultdict
 from typing import Optional
 
@@ -24,9 +26,12 @@ try:
     HAS_PRONOUNCING = True
 except ImportError:
     HAS_PRONOUNCING = False
-    print("Warning: 'pronouncing' library not found. Using fallback rhyme detection.")
-    print("For better rhymes, install it: pip install pronouncing\n")
 
+try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
 
 START_TOKEN = "<START>"
 END_TOKEN = "<END>"
@@ -51,7 +56,6 @@ class RhymeEngine:
                 # Get rhyming part
                 rhyme_part = pronouncing.rhyming_part(phones)
                 return rhyme_part if rhyme_part else None
-        
         
         if len(word) >= 3:
             return word[-3:]
@@ -213,6 +217,70 @@ class BigramMarkovChain:
         return None
 
 
+class LLMRefiner:
+    """Refines raw Markov output using Groq's LLM API."""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        if not HAS_GROQ:
+            raise ImportError("Groq library not found. Install with: pip install groq")
+        
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
+        if not self.api_key:
+            raise ValueError(
+                "Groq API key required. "
+                "Get a free key at: https://console.groq.com/keys"
+            )
+        
+        self.client = Groq(api_key=self.api_key)
+        self.model = "llama-3.1-8b-instant"
+    
+    def refine(self, raw_lyrics: str, rhyme_scheme: str = "AABB") -> str:
+        """Refine raw Markov lyrics for coherence while preserving style."""
+        
+        prompt = f"""You are a rap lyrics editor. Your job is to take raw, rough draft rap lyrics and refine them for coherence and flow while preserving the original style, vocabulary, and attitude.
+
+RULES:
+1. Keep the same number of bars (lines)
+2. Preserve the rhyme scheme: {rhyme_scheme}
+3. Keep as much original vocabulary as possible - these words define the style
+4. Fix grammar only where necessary for flow
+5. Make each line make sense on its own AND connect to the verse theme
+6. Keep the aggressive/introspective Eminem-style tone
+7. Maintain similar line lengths (8-12 words per bar)
+8. Do NOT censor or sanitize any language
+9. Do NOT add explanations - output ONLY the refined lyrics
+
+RAW LYRICS:
+{raw_lyrics}
+
+REFINED LYRICS:"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert rap lyrics editor. Output only refined lyrics, nothing else."
+                    },
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ],
+                temperature=0.7,
+                max_tokens=500,
+            )
+            
+            refined = response.choices[0].message.content.strip()
+            return refined
+            
+        except Exception as e:
+            print(f"LLM refinement failed: {e}")
+            print("Returning raw lyrics instead.")
+            return raw_lyrics
+
+
 class RapLyricsGenerator:
     """Main generator combining Markov chain with rhyme awareness."""
     
@@ -224,10 +292,17 @@ class RapLyricsGenerator:
         "FREE": None,          # No enforced scheme
     }
     
-    def __init__(self, corpus_path: str):
+    def __init__(self, corpus_path: str, groq_api_key: Optional[str] = None):
         self.markov = BigramMarkovChain()
         self.markov.train(corpus_path)
         self.rhyme_engine = RhymeEngine(self.markov.vocabulary)
+        
+        self.refiner: Optional[LLMRefiner] = None
+        if HAS_GROQ:
+            try:
+                self.refiner = LLMRefiner(api_key=groq_api_key)
+            except (ImportError, ValueError) as e:
+                print(f"LLM refinement unavailable: {e}\n")
     
     def generate_verse(self, num_bars: int = 4, rhyme_scheme: str = "AABB") -> list[str]:
         """Generate a verse with the specified rhyme scheme."""
@@ -267,10 +342,25 @@ class RapLyricsGenerator:
         # Format lines as strings
         return [" ".join(line) for line in lines]
     
-    def generate(self, num_bars: int = 8, rhyme_scheme: str = "AABB") -> str:
-        """Generate lyrics and return as formatted string."""
+    def generate(self, num_bars: int = 8, rhyme_scheme: str = "AABB", 
+                 refine: bool = False, show_raw: bool = False) -> str:
+        """Generate lyrics with optional LLM refinement."""
         verse = self.generate_verse(num_bars, rhyme_scheme)
-        return "\n".join(verse)
+        raw_lyrics = "\n".join(verse)
+        
+        if refine:
+            if not self.refiner:
+                print("Warning: LLM refinement requested but unavailable. Returning raw lyrics.\n")
+                return raw_lyrics
+            
+            if show_raw:
+                print("=== RAW MARKOV OUTPUT ===")
+                print(raw_lyrics)
+                print("\n=== LLM REFINED OUTPUT ===")
+            
+            return self.refiner.refine(raw_lyrics, rhyme_scheme)
+        
+        return raw_lyrics
 
 
 def main():
@@ -287,12 +377,15 @@ def main():
         help="Rhyme scheme to use (default: AABB)"
     )
     parser.add_argument("--verses", type=int, default=1, help="Number of verses to generate (default: 1)")
+    parser.add_argument("--refine", action="store_true", help="Use LLM to refine output for coherence")
+    parser.add_argument("--show-raw", action="store_true", help="Show raw Markov output alongside refined (requires --refine)")
+    parser.add_argument("--api-key", type=str, help="Groq API key (or set GROQ_API_KEY env var)")
     
     args = parser.parse_args()
     
     # Initialize generator
     print("-" * 50)
-    generator = RapLyricsGenerator(args.lyrics_file)
+    generator = RapLyricsGenerator(args.lyrics_file, groq_api_key=args.api_key)
     print("-" * 50)
     print()
     
@@ -301,7 +394,12 @@ def main():
         if args.verses > 1:
             print(f"[Verse {v + 1}]")
         
-        lyrics = generator.generate(num_bars=args.bars, rhyme_scheme=args.rhyme_scheme)
+        lyrics = generator.generate(
+            num_bars=args.bars, 
+            rhyme_scheme=args.rhyme_scheme,
+            refine=args.refine,
+            show_raw=args.show_raw
+        )
         print(lyrics)
         
         if v < args.verses - 1:
